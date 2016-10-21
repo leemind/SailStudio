@@ -13,7 +13,8 @@ NAMESERVER="$(grep 'nameserver' /etc/resolv.conf | awk '{ print $2}')"
 # SailStudio Servers
 SAILSTUDIOSERVERS="$(cat $HOSTS | awk '{print $1}')"
 
-#echo $SAILSTUDIOSERVERS
+# NTP Servers
+NTPSERVERS="$(grep ^server /etc/ntp.conf | awk '{print $2}')"
 
 echo "flush iptable rules"
 $IPT -F
@@ -28,7 +29,7 @@ $IPT -P INPUT   DROP
 $IPT -P FORWARD DROP
 $IPT -P OUTPUT  DROP
 
-# Allow DNS lookups (though in fact we have done this already, so is this necessary??
+# Allow DNS lookups 
 for ip in $NAMESERVER
 do
 	echo "Allowing DNS lookups (tcp, udp port 53) to server '$ip'"
@@ -48,12 +49,18 @@ $IPT -A OUTPUT -o wlan0 -j ACCEPT
 
 
 # Allow connections to all sailstudio servers
-for host in $SAILSTUDIOSERVERS
+for ip in $SAILSTUDIOSERVERS
 do
-	echo $host
-	ip="$(host -W 10 $host | awk '{ print $4}')"
-
 	echo "Allow connection to '$ip'"
 	$IPT -A OUTPUT -p tcp -d "$ip" -m state --state NEW,ESTABLISHED -j ACCEPT
 	$IPT -A INPUT  -p tcp -s "$ip" -m state --state ESTABLISHED     -j ACCEPT
+done
+	
+for ip in $NTPSERVERS
+do      
+        echo "Allowing NTP lookups (tcp, udp port 123) to server '$ip'"
+        $IPT -A OUTPUT -p udp -d $ip --dport 123 -m state --state NEW,ESTABLISHED -j ACCEPT
+        $IPT -A INPUT  -p udp -s $ip --sport 123 -m state --state ESTABLISHED     -j ACCEPT
+        $IPT -A OUTPUT -p tcp -d $ip --dport 123 -m state --state NEW,ESTABLISHED -j ACCEPT
+        $IPT -A INPUT  -p tcp -s $ip --sport 123 -m state --state ESTABLISHED     -j ACCEPT
 done
